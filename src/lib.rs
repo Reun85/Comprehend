@@ -1,6 +1,8 @@
 //! # Comprehension
 //!
-//! Macro rules starting with @ are internal
+//!
+//! Use `co!` to include a collect call.
+//! It's just: co!(...) <=> c!(...).collect()
 
 #[macro_export]
 macro_rules! c_internal {
@@ -20,24 +22,12 @@ macro_rules! c_internal {
     [@innif $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
         $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond $(, for $i2 in $iter2)*])
     };
-    [@innif $ex:expr, if $cond:expr, else $alt:expr, for $i:tt in $iter:expr] => {
-        $iter.iter().map(|$crate::c_internal!(@param $i)|
-        if $cond{
-            $ex
-        } else{
-            $alt
-        }
-        ).collect::<Vec<_>>()
-    };
-    [@innif $ex:expr, if $cond: expr, else $alt: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*])
-    };
 }
 #[macro_export]
 macro_rules! c {
 
     // ------------------------------------------------------------------------------------
-    //          Arrays
+    //          Arrays / Sets
     // ------------------------------------------------------------------------------------
 
 
@@ -46,17 +36,8 @@ macro_rules! c {
     [$ex:expr, for $i:tt in $iter:expr] => {
         $iter.into_iter().map(|$crate::c_internal!(@param $i)| $ex)
     };
-    [$ex:expr, if $cond:expr, for $i:tt in $iter:expr] => {
+    [$ex:expr, for $i:tt in $iter:expr, if $cond:expr] => {
         $iter.into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$i| $ex)
-    };
-    [$ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr] => {
-        $iter.into_iter().map(|$crate::c_internal!(@param $i)|
-            if $cond {
-                $ex
-            } else {
-                $alt
-            }
-        )
     };
 
 
@@ -70,32 +51,17 @@ macro_rules! c {
 
     // Handle nested array ifs.
     // ------------------------------------------------------------------------------------
-    [$ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+    [$ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr]=>{
         $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal!(@innif $ex, if $cond $(, for $i2 in $iter2)*))
     };
     // ------------------------------------------------------------------------------------
 
-    // Handle nested array if elses.
-    // ------------------------------------------------------------------------------------
-    [$ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal!(@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*))
-    };
-    // ------------------------------------------------------------------------------------
-
-
-    // ------------------------------------------------------------------------------------
-    //         Sets
-    // ------------------------------------------------------------------------------------
-    // NOTE: THese are essentially the same as arrays. Its up to you to collect as a set.
-    // Use co to automatically collect as a set.
-
-    // ------------------------------------------------------------------------------------
 
 
     // ------------------------------------------------------------------------------------
     //          HashMaps
     // ------------------------------------------------------------------------------------
-    // NOTE: THese are essentially the same as arrays. Its up to you to collect as a map.
+    // NOTE: These are essentially the same as arrays. Its up to you to collect as a map.
     // Use co to automatically collect as a hashmap.
 
     // Basic
@@ -109,23 +75,14 @@ macro_rules! c {
     {{$key:expr, $ex:expr}, for $i:tt in $iter:expr} => {
         $crate::c![($key, $ex), for $i in $iter]
     };
-    {$key:expr => $ex:expr, if $cond:expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, for $i in $iter]
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex), for $i in $iter, if $cond]
     };
-    {$key:expr, $ex:expr, if $cond:expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, for $i in $iter]
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex),  for $i in $iter, if $cond]
     };
-{{$key:expr, $ex:expr}, if $cond:expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, for $i in $iter]
-    };
-    {$key:expr => $ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
-    };
-    {$key:expr, ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
-    };
-    {{$key:expr, ex:expr}, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
-        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex),  for $i in $iter, if $cond]
     };
 
 
@@ -144,33 +101,109 @@ macro_rules! c {
 
     // Handle nested map ifs.
     // ------------------------------------------------------------------------------------
-    {$key:expr => $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::$crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond]
     };
-    {$key:expr, $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond:expr }=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond]
     };
-    {{$key:expr, $ex:expr}, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond]
     };
-    // ------------------------------------------------------------------------------------
-
-    // Handle nested map if elses.
-    // ------------------------------------------------------------------------------------
-    {$key:expr => $ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
-    };
-    {$key:expr, $ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
-    };
-    {{$key:expr, $ex:expr}, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
-        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
-    };
-
     // ------------------------------------------------------------------------------------
 
 }
 
+#[macro_export]
+macro_rules! co {
+
+    // ------------------------------------------------------------------------------------
+    //          Arrays / Sets
+    // ------------------------------------------------------------------------------------
+
+
+    // Basic
+    // ------------------------------------------------------------------------------------
+    [$ex:expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().map(|$crate::c_internal!(@param $i)| $ex).collect()
+    };
+    [$ex:expr, for $i:tt in $iter:expr, if $cond:expr] => {
+        $iter.into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$i| $ex).collect()
+    };
+
+
+    // Handle nested arrays
+    // ------------------------------------------------------------------------------------
+    [$ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@inn $ex $(, for $i2 in $iter2)*]).collect()
+
+    };
+    // ------------------------------------------------------------------------------------
+
+    // Handle nested array ifs.
+    // ------------------------------------------------------------------------------------
+    [$ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal!(@innif $ex, if $cond $(, for $i2 in $iter2)*)).collect()
+    };
+    // ------------------------------------------------------------------------------------
+
+
+
+    // ------------------------------------------------------------------------------------
+    //          HashMaps
+    // ------------------------------------------------------------------------------------
+    // NOTE: These are essentially the same as arrays. Its up to you to collect as a map.
+    // Use co to automatically collect as a hashmap.
+
+    // Basic
+    // ------------------------------------------------------------------------------------
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter].collect()
+    };
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter].collect()
+    };
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter].collect()
+    };
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex), for $i in $iter, if $cond].collect()
+    };
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex),  for $i in $iter, if $cond].collect()
+    };
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr, if $cond:expr} => {
+        $crate::c![($key,$ex),  for $i in $iter, if $cond].collect()
+    };
+
+
+    // Handle nested maps
+    // ------------------------------------------------------------------------------------
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*].collect()
+    };
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*].collect()
+    };
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*].collect()
+    };
+    // ------------------------------------------------------------------------------------
+
+    // Handle nested map ifs.
+    // ------------------------------------------------------------------------------------
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond].collect()
+    };
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond:expr }=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond].collect()
+    };
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*, if $cond: expr}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*, if $cond].collect()
+    };
+    // ------------------------------------------------------------------------------------
+
+}
 #[cfg(test)]
 mod array_tests {
     use super::*;
@@ -210,7 +243,7 @@ mod array_tests {
     fn filter() {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        let y: Vec<_> = c![x, if x %2 == 0, for x in v].collect();
+        let y: Vec<_> = c![x, for x in v, if x %2 == 0].collect();
 
         assert_eq!(y, vec![2, 4, 6, 8, 10]);
     }
@@ -219,7 +252,7 @@ mod array_tests {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         // Pass all
-        let y: Vec<_> = c![x, if x %2 == 1 || x%2 ==0, for x in v].collect();
+        let y: Vec<_> = c![x, for x in v, if x %2 == 1 || x%2 ==0].collect();
 
         assert_eq!(y, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
@@ -234,7 +267,7 @@ mod array_tests {
     #[test]
     fn nested_ranges() {
         let y: Vec<(i32, i32)> =
-            c![(i,j), if (i+j) % 3 == 0, for i in 0..3, for j in 0..3].collect();
+            c![(i,j), for i in 0..3, for j in 0..3, if (i+j) % 3 == 0].collect();
         assert_eq!(y, vec![(0, 0), (1, 2), (2, 1)]);
     }
     #[test]
@@ -335,7 +368,7 @@ mod map_tests {
     fn filter() {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        let y: HashMap<i32, i32> = c! {x=>x%3, if x %2 == 0, for x in v}.collect();
+        let y: HashMap<i32, i32> = c! {x=>x%3, for x in v, if x %2 == 0}.collect();
 
         assert_eq!(y, HashMap::from([(2, 2), (4, 1), (6, 0), (8, 2), (10, 1)]));
     }
@@ -344,7 +377,7 @@ mod map_tests {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         // Pass all
-        let y: HashMap<i32, i32> = c! {x=>x%3, if x %2 == 1 || x%2 ==0, for x in v}.collect();
+        let y: HashMap<i32, i32> = c! {x=>x%3, for x in v, if x %2 == 1 || x%2 ==0}.collect();
 
         assert_eq!(
             y,
@@ -383,10 +416,32 @@ mod map_tests {
         );
     }
     #[test]
+    fn nested_basic2() {
+        let v = vec![vec![1, 2], vec![3, 4], vec![5, 6], vec![7, 8]];
+
+        let y: HashMap<_, _> =
+            c! {z=>ind, for x in v, for (ind,z) in c![2*z, for z in x].into_iter().enumerate()}
+                .collect();
+
+        assert_eq!(
+            y,
+            HashMap::from([
+                (2, 0),
+                (4, 1),
+                (6, 0),
+                (8, 1),
+                (10, 0),
+                (12, 1),
+                (14, 0),
+                (16, 1)
+            ])
+        );
+    }
+    #[test]
     fn nested_multiarray() {
         let v = vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]];
 
-        let y: HashMap<i32, i32> = c! {2*p=>y[0], for x in v, for y in x, for p in y}.collect();
+        let y: HashMap<_, _> = c! {2*p=>y[0], for x in v, for y in x, for p in y}.collect();
 
         assert_eq!(
             y,
