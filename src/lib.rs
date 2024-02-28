@@ -5,25 +5,6 @@
 //! It's just: co!(...) <=> c!(...).collect()
 
 #[macro_export]
-macro_rules! c_internal {
-
-    (@param $i:ident) => {$i};
-    (@param _) => {_};
-    (@param ($($i:tt),*)) => {( $($crate::c_internal!(@param $i)),*)};
-    [@inn $ex:expr, for $i:tt in $iter:expr] => {
-        $iter.clone().into_iter().map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
-    };
-    [@inn $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@inn $ex $(, for $i2 in $iter2)*])
-    };
-    [@innif $ex:expr, if $cond:expr, for $i:tt in $iter:expr] => {
-        $iter.clone().into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
-    };
-    [@innif $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond $(, for $i2 in $iter2)*])
-    };
-}
-#[macro_export]
 macro_rules! c {
 
     // ------------------------------------------------------------------------------------
@@ -204,6 +185,26 @@ macro_rules! co {
     // ------------------------------------------------------------------------------------
 
 }
+#[macro_export]
+macro_rules! c_internal {
+
+    (@param $i:ident) => {$i};
+    (@param _) => {_};
+    (@param ($($i:tt),*)) => {( $($crate::c_internal!(@param $i)),*)};
+    [@inn $ex:expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
+    };
+    [@inn $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@inn $ex $(, for $i2 in $iter2)*])
+    };
+    [@innif $ex:expr, if $cond:expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
+    };
+    [@innif $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond $(, for $i2 in $iter2)*])
+    };
+}
+
 #[cfg(test)]
 mod array_tests {
     use super::*;
@@ -211,12 +212,12 @@ mod array_tests {
     fn basic() {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        let y: Vec<i32> = c![x, for (_,x) in v.into_iter().enumerate()].collect();
+        let y: Vec<i32> = c![x, for x in v].collect();
 
         assert_eq!(y, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
     #[test]
-    fn basic2() {
+    fn complex_collection() {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         let y: Vec<_> = c![(ind*x), for (ind,x) in v.into_iter().enumerate()].collect();
@@ -273,10 +274,16 @@ mod array_tests {
     #[test]
     fn nested_multiarray() {
         let v = vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]];
+        let v2 = v.clone();
 
-        // Using .iter therefore we do actually clone.
-        let y: Vec<_> = c![p*y[0], for x in v.iter(), for y in x, for p in y].collect();
+        // This is an edge case. The `y` inner variable is used 2 times. We need to clone it.
+        // Since the expression is evaluated at the end, we need to clone in 'for' loop.
+        // There is no way to automatically clone the collection, without cloning in other
+        // (unnecessary) cases.
+        // Thankfully, the Rust LSP will tell you to clone it.
+        let y: Vec<_> = c![p*y[0], for x in v, for y in x, for p in y.clone()].collect();
 
+        let v = v2;
         assert_eq!(
             y,
             vec![
@@ -420,8 +427,7 @@ mod map_tests {
         let v = vec![vec![1, 2], vec![3, 4], vec![5, 6], vec![7, 8]];
 
         let y: HashMap<_, _> =
-            c! {z=>ind, for x in v, for (ind,z) in c![2*z, for z in x].into_iter().enumerate()}
-                .collect();
+            c! {z=>ind, for x in v, for (ind,z) in c![2*z, for z in x].enumerate()}.collect();
 
         assert_eq!(
             y,
@@ -441,7 +447,7 @@ mod map_tests {
     fn nested_multiarray() {
         let v = vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]];
 
-        let y: HashMap<_, _> = c! {2*p=>y[0], for x in v, for y in x, for p in y}.collect();
+        let y: HashMap<_, _> = c! {2*p=>y[0], for x in v, for y in x, for p in y.clone()}.collect();
 
         assert_eq!(
             y,
