@@ -1,3 +1,38 @@
+//! # Comprehension
+//!
+//! Macro rules starting with @ are internal
+
+#[macro_export]
+macro_rules! c_internal {
+
+    (@param $i:ident) => {$i};
+    (@param _) => {_};
+    (@param ($($i:tt),*)) => {( $($crate::c_internal!(@param $i)),*)};
+    [@inn $ex:expr, for $i:tt in $iter:expr] => {
+        $iter.clone().into_iter().map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
+    };
+    [@inn $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@inn $ex $(, for $i2 in $iter2)*])
+    };
+    [@innif $ex:expr, if $cond:expr, for $i:tt in $iter:expr] => {
+        $iter.clone().into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$crate::c_internal!(@param $i)| $ex).collect::<Vec<_>>()
+    };
+    [@innif $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond $(, for $i2 in $iter2)*])
+    };
+    [@innif $ex:expr, if $cond:expr, else $alt:expr, for $i:tt in $iter:expr] => {
+        $iter.iter().map(|$crate::c_internal!(@param $i)|
+        if $cond{
+            $ex
+        } else{
+            $alt
+        }
+        ).collect::<Vec<_>>()
+    };
+    [@innif $ex:expr, if $cond: expr, else $alt: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*])
+    };
+}
 #[macro_export]
 macro_rules! c {
 
@@ -5,34 +40,17 @@ macro_rules! c {
     //          Arrays
     // ------------------------------------------------------------------------------------
 
+
     // Basic
     // ------------------------------------------------------------------------------------
-    [$ex:expr, for $i:ident in $iter:expr] => {
-        $iter.into_iter().map(|$i| $ex)
+    [$ex:expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().map(|$crate::c_internal!(@param $i)| $ex)
     };
-    [$ex:expr, if $cond:expr, for $i:ident in $iter:expr] => {
-        $iter.into_iter().filter(|$i| $cond).map(|$i| $ex)
+    [$ex:expr, if $cond:expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().filter(|$crate::c_internal!(@param $i)| $cond).map(|$i| $ex)
     };
-    [$ex:expr, if $cond:expr, else $alt: expr, for $i:ident in $iter:expr] => {
-        $iter.into_iter().map(|$i|
-            if $cond {
-                $ex
-            } else {
-                $alt
-            }
-        )
-    };
-    [$ex:expr, for ($($i:ident),*) in $iter:expr] => {
-        $iter.into_iter().map(|($($i),*)| $ex)
-    };
-    [$ex:expr, if $cond:expr, for ($($i:ident),*) in $iter:expr] => {
-        $iter.into_iter().filter(|($($i),*)| $cond).map(|($($i),*)| $ex)
-    };
-    [$ex:expr, if $cond:expr, for ($($i:ident),*) in $iter:expr] => {
-        $iter.into_iter().filter(|$i| $cond).map(|$i| $ex)
-    };
-    [$ex:expr, if $cond:expr, else $alt: expr, for ($($i:ident),*) in $iter:expr] => {
-        $iter.into_iter().map(|($($i),*)|
+    [$ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr] => {
+        $iter.into_iter().map(|$crate::c_internal!(@param $i)|
             if $cond {
                 $ex
             } else {
@@ -44,65 +62,23 @@ macro_rules! c {
 
     // Handle nested arrays
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    [@inn $ex:expr, for $i:ident in $iter:expr] => {
-        $iter.iter().map(|$i| $ex).collect::<Vec<_>>()
-    };
-    [@inn $ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@inn $ex $(, for $i2 in $iter2)*])
-    };
-    [$ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@inn $ex $(, for $i2 in $iter2)*])
-    };
+    [$ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal![@inn $ex $(, for $i2 in $iter2)*])
 
-    [@inn $ex:expr, for $i:ident in $iter:expr] => {
-        $iter.iter().map(|$i| $ex).collect::<Vec<_>>()
-    };
-    [@inn $ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@inn $ex $(, for $i2 in $iter2)*])
-    };
-    [$ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@inn $ex $(, for $i2 in $iter2)*])
     };
     // ------------------------------------------------------------------------------------
 
     // Handle nested array ifs.
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    [@innif $ex:expr, if $cond:expr, for $i:ident in $iter:expr] => {
-        $iter.iter().filter(|$i| $cond).map(|$i| $ex).collect::<Vec<_>>()
-    };
-    [@innif $ex:expr, if $cond: expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@innif $ex, if $cond $(, for $i2 in $iter2)*])
-    };
-    [$ex:expr, if $cond: expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c!(@innif $ex, if $cond $(, for $i2 in $iter2)*))
+    [$ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal!(@innif $ex, if $cond $(, for $i2 in $iter2)*))
     };
     // ------------------------------------------------------------------------------------
 
     // Handle nested array if elses.
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    [@innif $ex:expr, if $cond:expr, else $alt:expr, for $i:ident in $iter:expr] => {
-        $iter.iter().map(|$i|
-        if $cond{
-            $ex
-        } else{
-            $alt
-        }
-        ).collect::<Vec<_>>()
-    };
-    [@innif $ex:expr, if $cond: expr, else $alt: expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c![@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*])
-    };
-    [$ex:expr, if $cond: expr, else $alt:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        $iter.into_iter().flat_map(|$i| c!(@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*))
+    [$ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*]=>{
+        $iter.into_iter().flat_map(|$crate::c_internal!(@param $i)| $crate::c_internal!(@innif $ex, if $cond, else $alt $(, for $i2 in $iter2)*))
     };
     // ------------------------------------------------------------------------------------
 
@@ -124,62 +100,71 @@ macro_rules! c {
 
     // Basic
     // ------------------------------------------------------------------------------------
-    {$key:expr => $ex:expr, for $i:ident in $iter:expr} => {
-        c![($key, $ex), for $i in $iter]
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter]
     };
-    {$key:expr, $ex:expr, for $i:ident in $iter:expr} => {
-        c![($key, $ex), for $i in $iter]
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter]
     };
-    {$key:expr => $ex:expr, if $cond:expr, for $i:ident in $iter:expr} => {
-        c![($key,$ex), if $cond, for $i in $iter]
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr} => {
+        $crate::c![($key, $ex), for $i in $iter]
     };
-    {$key:expr, $ex:expr, if $cond:expr, for $i:ident in $iter:expr} => {
-        c![($key,$ex), if $cond, for $i in $iter]
+    {$key:expr => $ex:expr, if $cond:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, for $i in $iter]
     };
-    {$key:expr => $ex:expr, if $cond:expr, else $alt: expr, for $i:ident in $iter:expr} => {
-        c![($key,$ex), if $cond, else $alt, for $i in $iter]
+    {$key:expr, $ex:expr, if $cond:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, for $i in $iter]
     };
-    {$key:expr, ex:expr, if $cond:expr, else $alt: expr, for $i:ident in $iter:expr} => {
-        c![($key,$ex), if $cond, else $alt, for $i in $iter]
+{{$key:expr, $ex:expr}, if $cond:expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, for $i in $iter]
+    };
+    {$key:expr => $ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
+    };
+    {$key:expr, ex:expr, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
+    };
+    {{$key:expr, ex:expr}, if $cond:expr, else $alt: expr, for $i:tt in $iter:expr} => {
+        $crate::c![($key,$ex), if $cond, else $alt, for $i in $iter]
     };
 
 
     // Handle nested maps
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    {$key:expr => $ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*}=>{
-        c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr => $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*]
     };
-    {$key:expr, $ex:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*}=>{
-        c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr, $ex:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*]
+    };
+    {{$key:expr, $ex:expr}, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), for $i in $iter $(, for $i2 in $iter2)*]
     };
     // ------------------------------------------------------------------------------------
 
     // Handle nested map ifs.
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    [$key:expr => $ex:expr, if $cond: expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr => $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::$crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
     };
-    [$key:expr, $ex:expr, if $cond: expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*]=>{
-        c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr, $ex:expr, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
+    };
+    {{$key:expr, $ex:expr}, if $cond: expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), if $cond, for $i in $iter $(, for $i2 in $iter2)*]
     };
     // ------------------------------------------------------------------------------------
 
     // Handle nested map if elses.
     // ------------------------------------------------------------------------------------
-    // NOTE: When dealing with nested types we sadly have to collect the final layout since
-    // otherwise cases such as c![x*y[0], for y in v, for x in y] can occur.
-    // TODO: Is there a better way?
-    {$key:expr => $ex:expr, if $cond: expr, else $alt:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*}=>{
-        c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr => $ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
     };
-    {$key:expr, $ex:expr, if $cond: expr, else $alt:expr, for $i:ident in $iter:expr $(,for $i2:ident in $iter2:expr)*}=>{
-        c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
+    {$key:expr, $ex:expr, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
+    };
+    {{$key:expr, $ex:expr}, if $cond: expr, else $alt:expr, for $i:tt in $iter:expr $(,for $i2:tt in $iter2:expr)*}=>{
+        $crate::c![($key, $ex), if $cond, else $alt, for $i in $iter $(, for $i2 in $iter2)*]
     };
 
     // ------------------------------------------------------------------------------------
@@ -193,7 +178,7 @@ mod array_tests {
     fn basic() {
         let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        let y: Vec<_> = c![x, for x in v].collect();
+        let y: Vec<i32> = c![x, for (_,x) in v.into_iter().enumerate()].collect();
 
         assert_eq!(y, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
@@ -245,6 +230,12 @@ mod array_tests {
         let y: Vec<_> = c![2*p, for x in v, for y in x, for p in y].collect();
 
         assert_eq!(y, vec![2, 4, 6, 8, 10, 12, 14, 16]);
+    }
+    #[test]
+    fn nested_ranges() {
+        let y: Vec<(i32, i32)> =
+            c![(i,j), if (i+j) % 3 == 0, for i in 0..3, for j in 0..3].collect();
+        assert_eq!(y, vec![(0, 0), (1, 2), (2, 1)]);
     }
     #[test]
     fn nested_multiarray() {
