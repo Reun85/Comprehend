@@ -204,15 +204,83 @@ macro_rules! c_internal {
 }
 
 #[cfg(test)]
-mod array_tests {
+mod tests {
     use super::*;
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct NonCopyNumber(i32);
+    impl std::ops::Add for NonCopyNumber {
+        type Output = NonCopyNumber;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            Self(self.0 + rhs.0)
+        }
+    }
+    impl PartialEq<i32> for NonCopyNumber {
+        fn eq(&self, other: &i32) -> bool {
+            self.0 == *other
+        }
+    }
+    impl std::ops::Add<i32> for NonCopyNumber {
+        type Output = NonCopyNumber;
+
+        fn add(self, rhs: i32) -> Self::Output {
+            Self(self.0 + rhs)
+        }
+    }
+
+    impl std::ops::Mul<i32> for NonCopyNumber {
+        type Output = NonCopyNumber;
+
+        fn mul(self, rhs: i32) -> Self::Output {
+            Self(self.0 * rhs)
+        }
+    }
+    impl std::ops::Mul<NonCopyNumber> for i32 {
+        type Output = NonCopyNumber;
+
+        fn mul(self, rhs: NonCopyNumber) -> Self::Output {
+            NonCopyNumber(rhs.0 * self)
+        }
+    }
+    impl std::ops::Mul for NonCopyNumber {
+        type Output = NonCopyNumber;
+
+        fn mul(self, rhs: Self) -> Self::Output {
+            Self(self.0 * rhs.0)
+        }
+    }
+    impl std::convert::From<i32> for NonCopyNumber {
+        fn from(other: i32) -> Self {
+            Self(other)
+        }
+    }
+    const NONCOPYABLENESTED: [[[NonCopyNumber; 2]; 2]; 2] = [
+        [
+            [NonCopyNumber(1), NonCopyNumber(2)],
+            [NonCopyNumber(3), NonCopyNumber(4)],
+        ],
+        [
+            [NonCopyNumber(5), NonCopyNumber(6)],
+            [NonCopyNumber(7), NonCopyNumber(8)],
+        ],
+    ];
+
     #[test]
     fn basic() {
-        let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let v: Vec<NonCopyNumber> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            .into_iter()
+            .map(|x| x.into())
+            .collect();
 
-        let y: Vec<i32> = comp![x, for x in v].collect();
+        let y: Vec<NonCopyNumber> = comp![x, for x in v].collect();
 
-        assert_eq!(y, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        assert_eq!(
+            y,
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                .into_iter()
+                .map(|x| x.into())
+                .collect::<Vec<NonCopyNumber>>()
+        );
     }
     #[test]
     fn complex_collection() {
@@ -257,9 +325,10 @@ mod array_tests {
     }
     #[test]
     fn nested_basic() {
-        let v = vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]];
+        // let v = vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]];
+        let v = NONCOPYABLENESTED.clone();
 
-        let y: Vec<_> = comp![2*p, for x in v, for y in x, for p in y].collect();
+        let y: Vec<_> = comp![2i32*p, for x in v, for y in x, for p in y].collect();
 
         assert_eq!(y, vec![2, 4, 6, 8, 10, 12, 14, 16]);
     }
@@ -279,6 +348,7 @@ mod array_tests {
         // There is no way to automatically clone the collection, without cloning in other
         // (unnecessary) cases.
         // Thankfully, the Rust LSP will tell you to clone it.
+        // This edge case will also not work if the type does not impl Copy.
         let y: Vec<_> = comp![p*y[0], for x in v, for y in x, for p in y.clone()].collect();
 
         let v = v2;
