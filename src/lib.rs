@@ -1,14 +1,14 @@
 //! # Comprehension
 //!
-//! Python like list, set and hashmap comprehensions for Rust as efficiently as possible.
+//! Python like list, set and hashmap comprehensions for Rust.
 //!
 //! Due to how Python handles comprehensions, a one to one translation is not possible, atleast not without resorting to cloning
-//! everything. When using this library, its up to the user to clone if
-//! necessary.
+//! everything.
+//! When using this library its up to the user to clone a collection when necessary.
 //!
-//! Upholds Rust ownerships and borrow rules, passing by value WILL consume the collection.
+//! Upholds Rust ownerships and borrow rules. Passing by value WILL consume the collection.
 //!
-//! `comp!` returns a iterator over the elements. `compco!` includes a .collect() call.
+//! `comp!` returns an iterator over the elements. `compco!` includes a .collect() call.
 //!
 //! ## Examples
 //!
@@ -58,7 +58,9 @@
 //! Hashmap comprehension can be also nested used with filters or the special => syntax.
 //!
 //!
-//! Special '=>' syntax when using nested comprehensions, to do an operation on an inner loop.
+//! Special '=>' syntax:
+//! When using nested comprehensions use '=>' to do an operation in an inner comprehension once before the
+//! loop.
 //! For example assign the first variable as value to the other numbers as keys in the array.
 //!```
 //! # use std::collections::HashMap;
